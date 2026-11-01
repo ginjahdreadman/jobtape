@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#E6E8E1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131614" media="(prefers-color-scheme: dark)">
+<title>Job Tape</title>
+<style>
+/* One narrow column built like a handheld recorder: talk button and text box on top, tasks grouped by list below. */
+:root {
+  color-scheme: light dark;
+  --bg: #E6E8E1; --panel: #F4F5F0; --ink: #1B201C; --ink-2: #566058; --line: #C6CBC1;
+  --rec: #C4301C; --rec-ink: #FFFFFF; --chip: #D8DDD2; --ok: #2F6B45;
+  --font-body: "Barlow Semi Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, "Roboto Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #131614; --panel: #1C201D; --ink: #E9ECE5; --ink-2: #9BA49C; --line: #333A35; --rec: #FF5B43; --rec-ink: #1A0804; --chip: #2A302C; --ok: #6FC08C; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.35;
+  padding-block: max(20px, env(safe-area-inset-top, 0px)) max(48px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 620px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: 0.01em; }
+.counter { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.counter b { color: var(--ink); font-weight: 600; }
+
+.deck { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.deck-top { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); }
+.led { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
+.deck[data-live="true"] .led { background: var(--rec); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rec) 25%, transparent); }
+.deck[data-live="true"] .led { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .deck[data-live="true"] .led { animation: none; } }
+
+.talk { min-height: 64px; width: 100%; border-radius: 10px; border: 0; background: var(--rec); color: var(--rec-ink); font: inherit; font-size: 22px; font-weight: 700; letter-spacing: 0.02em; cursor: pointer; }
+.talk[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.talk:disabled { opacity: 0.45; cursor: default; }
+textarea { width: 100%; min-height: 110px; resize: vertical; font: inherit; font-size: 18px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+textarea::placeholder { color: var(--ink-2); }
+.hint { margin: 0; font-size: 15px; color: var(--ink-2); max-width: 60ch; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+button { font: inherit; cursor: pointer; }
+.btn { min-height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid var(--ink); background: transparent; color: var(--ink); font-weight: 600; }
+:focus-visible { outline: 2px solid var(--rec); outline-offset: 2px; }
+.status { min-height: 24px; font-size: 15px; color: var(--ink-2); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.status .linkish { background: none; border: 0; padding: 4px 0; color: var(--ink); text-decoration: underline; font-weight: 600; }
+
+.group { display: flex; flex-direction: column; gap: 4px; }
+.group h2 { margin: 0 0 2px; font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); display: flex; justify-content: space-between; }
+ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+li.task { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 44px; align-items: center; border-top: 1px solid var(--line); }
+li.task:last-child { border-bottom: 1px solid var(--line); }
+.tick { width: 44px; height: 48px; background: none; border: 0; display: grid; place-items: center; color: var(--ink); }
+.tick span { width: 22px; height: 22px; border: 2px solid var(--ink); border-radius: 5px; display: grid; place-items: center; font-size: 15px; line-height: 1; }
+li.done .tick span { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+li.done .tick span::after { content: "\2713"; }
+.txt { padding: 10px 6px; min-width: 0; overflow-wrap: anywhere; }
+li.done .txt { color: var(--ink-2); text-decoration: line-through; }
+.chip { min-height: 32px; padding: 0 10px; border-radius: 6px; border: 0; background: var(--chip); color: var(--ink-2); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; }
+.del { width: 44px; height: 48px; background: none; border: 0; color: var(--ink-2); font-size: 22px; line-height: 1; }
+.empty { border: 1px dashed var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; color: var(--ink-2); }
+.empty h2 { margin: 0; font-size: 20px; color: var(--ink); }
+.empty p { margin: 0; max-width: 60ch; }
+.example { background: var(--panel); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 16px; }
+.example .tag { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+.example q { color: var(--ink); quotes: none; font-style: italic; }
+.example li { padding: 3px 0; color: var(--ink); }
+.tools { display: flex; gap: 10px; flex-wrap: wrap; }
+#copybox { width: 100%; min-height: 110px; font-family: var(--font-mono); font-size: 14px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Job Tape</h1>
+    <div class="counter" id="counter" aria-live="polite">Open <b>00</b> / Done <b>00</b></div>
+  </header>
+
+  <section class="deck" id="deck" data-live="false" aria-label="Dictation">
+    <div class="deck-top"><span class="led" aria-hidden="true"></span><span id="deckState">Ready</span></div>
+    <button class="talk" id="talk" type="button" aria-pressed="false">Talk</button>
+    <label for="dictation" class="hint">Tap Talk, say your jobs, tap Stop and they go on the list. Say &ldquo;next task&rdquo; between jobs so they split cleanly.</label>
+    <textarea id="dictation" placeholder="Or type here. Ring Dave about the switchboard quote, next task, pick up 20 amp breakers, next task, book the ute in for a service"></textarea>
+    <div class="row"><button class="btn" id="add" type="button">Add to list</button></div>
+  </section>
+
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <section id="lists" aria-label="Tasks"></section>
+
+  <div class="tools" id="tools" hidden>
+    <button class="btn" id="copy" type="button">Copy open tasks</button>
+    <button class="btn" id="clear" type="button">Clear done</button>
+  </div>
+  <textarea id="copybox" readonly hidden aria-label="Open tasks as text"></textarea>
+</main>
+
+<script>
+(function () {
+  var LISTS = ["Inbox", "Jobs", "Home", "Buy", "Calls"];
+  var KEY = "jobtape.standalone.v1";
+  var tasks = [];
+  var lastRemoved = null;
+  var $ = function (id) { return document.getElementById(id); };
+  var box = $("dictation"), deck = $("deck"), talk = $("talk");
+
+  function readLocal() { try { var r = localStorage.getItem(KEY); var a = r ? JSON.parse(r) : []; return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(tasks)); } catch (e) { setStatus("This browser would not save the list. It will be lost when you close the page."); } }
+  function makeId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  function setStatus(msg, undoable) {
+    var el = $("status"); el.textContent = msg || "";
+    if (undoable) {
+      var b = document.createElement("button"); b.type = "button"; b.className = "linkish"; b.textContent = "Undo";
+      b.onclick = function () { if (lastRemoved) { tasks.splice(Math.min(lastRemoved.i, tasks.length), 0, lastRemoved.t); lastRemoved = null; persist(); setStatus("Restored."); } };
+      el.appendChild(b);
+    }
+  }
+  function persist() { save(); render(); }
+
+  // Filing by keyword. Simple on purpose; tap a task's list label to move it.
+  function guessList(s) {
+    if (/\b(ring|call|phone|text|message|email|ping)\b/i.test(s)) return "Calls";
+    if (/\b(buy|pick up|order|grab|purchase|stock up)\b/i.test(s)) return "Buy";
+    if (/\b(quote|install|wire|wiring|switchboard|circuit|site|job|invoice|inspect|test|certificate|cert|compliance)\b/i.test(s)) return "Jobs";
+    if (/\b(mow|lawn|garden|fence|house|kids|dinner|clean|trailer|paddock)\b/i.test(s)) return "Home";
+    return "Inbox";
+  }
+  function split(text) {
+    var lead = /^(?:and|also|then|to|remind me to|i need to|i have to|need to|don't forget to)\s+/i;
+    return text.split(/\n+|[.!?;]+(?:\s+|$)|\s*\b(?:next task|new task|next job|next one|and then)\b[,\s]*/i)
+      .map(function (s) { return s.trim().replace(lead, "").replace(lead, "").replace(/[,\s]+$/, ""); })
+      .filter(function (s) { return s.length > 1; })
+      .map(function (s) { return s.charAt(0).toUpperCase() + s.slice(1); });
+  }
+  function addFromBox() {
+    var items = split(box.value);
+    if (!items.length) { setStatus("Nothing to add yet. Talk or type a task first."); return 0; }
+    var now = Date.now();
+    tasks = items.map(function (s, i) { return { id: makeId(), text: s, list: guessList(s), done: false, ts: now + i }; }).concat(tasks);
+    box.value = ""; persist();
+    setStatus(items.length + (items.length === 1 ? " task" : " tasks") + " added. Tap a list label to move one.");
+    return items.length;
+  }
+
+  function render() {
+    var open = tasks.filter(function (t) { return !t.done; }).length, done = tasks.length - open;
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    $("counter").innerHTML = "Open <b>" + pad(open) + "</b> / Done <b>" + pad(done) + "</b>";
+    $("tools").hidden = tasks.length === 0;
+    var host = $("lists"); host.textContent = "";
+    if (!tasks.length) {
+      var e = document.createElement("div"); e.className = "empty";
+      e.innerHTML = '<h2>Nothing on the tape yet</h2><p>Talk through your jobs and each one becomes its own line you can tick off.</p>' +
+        '<div class="example"><span class="tag">Example, not saved</span><q>Ring Dave about the switchboard quote, next task, pick up 20 amp breakers, next task, book the ute in for a service.</q>' +
+        '<ul><li>Ring Dave about the switchboard quote</li><li>Pick up 20 amp breakers</li><li>Book the ute in for a service</li></ul></div>';
+      host.appendChild(e); return;
+    }
+    var wrap = document.createElement("div"); wrap.style.cssText = "display:flex;flex-direction:column;gap:20px";
+    LISTS.forEach(function (name) {
+      var items = tasks.filter(function (t) { return t.list === name; });
+      if (!items.length) return;
+      items.sort(function (a, b) { return (a.done - b.done) || (b.ts - a.ts); });
+      var g = document.createElement("div"); g.className = "group";
+      var h = document.createElement("h2"); h.innerHTML = "<span></span><span></span>";
+      h.children[0].textContent = name;
+      h.children[1].textContent = items.filter(function (t) { return !t.done; }).length + " open";
+      g.appendChild(h);
+      var ul = document.createElement("ul");
+      items.forEach(function (t) {
+        var li = document.createElement("li"); li.className = "task" + (t.done ? " done" : "");
+        var tick = document.createElement("button"); tick.type = "button"; tick.className = "tick";
+        tick.setAttribute("aria-label", (t.done ? "Mark not done: " : "Mark done: ") + t.text); tick.innerHTML = "<span></span>";
+        tick.onclick = function () { t.done = !t.done; persist(); };
+        var tx = document.createElement("div"); tx.className = "txt"; tx.textContent = t.text;
+        var chip = document.createElement("button"); chip.type = "button"; chip.className = "chip"; chip.textContent = t.list;
+        chip.setAttribute("aria-label", "Move " + t.text + " to the next list");
+        chip.onclick = function () { t.list = LISTS[(LISTS.indexOf(t.list) + 1) % LISTS.length]; persist(); };
+        var del = document.createElement("button"); del.type = "button"; del.className = "del"; del.innerHTML = "&times;";
+        del.setAttribute("aria-label", "Remove " + t.text);
+        del.onclick = function () { var i = tasks.indexOf(t); tasks.splice(i, 1); lastRemoved = { t: t, i: i }; persist(); setStatus("Removed.", true); };
+        li.appendChild(tick); li.appendChild(tx); li.appendChild(chip); li.appendChild(del); ul.appendChild(li);
+      });
+      g.appendChild(ul); wrap.appendChild(g);
+    });
+    host.appendChild(wrap);
+  }
+
+  // Speech. Tap Talk to start, tap Stop to finish and add.
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var rec = null, want = false, addOnEnd = false, base = "";
+  function setLive(on) {
+    deck.dataset.live = on ? "true" : "false";
+    talk.setAttribute("aria-pressed", on ? "true" : "false");
+    talk.textContent = on ? "Stop and add" : "Talk";
+    $("deckState").textContent = on ? "Listening" : "Ready";
+  }
+  function startTalk() {
+    base = box.value ? box.value.replace(/\s+$/, "") + " " : "";
+    rec = new SR(); rec.lang = "en-NZ"; rec.continuous = true; rec.interimResults = true;
+    rec.onresult = function (e) {
+      var t = ""; for (var i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+      box.value = base + t;
+    };
+    rec.onerror = function (e) {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") { want = false; setStatus("Microphone is blocked. Allow it for this site in your browser settings, then try again."); }
+      else if (e.error === "audio-capture") { want = false; setStatus("No microphone found."); }
+      else if (e.error === "network") { want = false; setStatus("Speech recognition needs an internet connection."); }
+    };
+    rec.onend = function () {
+      if (want) { base = box.value.replace(/\s+$/, "") + " "; try { rec.start(); return; } catch (err) { want = false; } }
+      setLive(false);
+      if (addOnEnd) { addOnEnd = false; addFromBox(); }
+    };
+    want = true; setLive(true); setStatus("");
+    try { rec.start(); } catch (err) { want = false; setLive(false); setStatus("Could not start the microphone. Try again."); }
+  }
+  function stopTalk() { want = false; addOnEnd = true; try { rec.stop(); } catch (err) { setLive(false); addOnEnd = false; addFromBox(); } }
+
+  if (!SR) {
+    talk.disabled = true; talk.textContent = "Talk (not supported here)";
+    $("deckState").textContent = "Typing only";
+    setStatus("This browser has no speech recognition. Use Chrome on Android or Safari on iPhone, or use the keyboard's mic key.");
+  } else {
+    talk.onclick = function () { if (want) stopTalk(); else startTalk(); };
+  }
+  $("add").onclick = function () { if (want) stopTalk(); else addFromBox(); };
+  box.addEventListener("keydown", function (e) { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") $("add").click(); });
+
+  $("clear").onclick = function () {
+    var n = tasks.filter(function (t) { return t.done; }).length;
+    if (!n) { setStatus("No finished tasks to clear."); return; }
+    tasks = tasks.filter(function (t) { return !t.done; }); persist();
+    setStatus("Cleared " + n + " finished " + (n === 1 ? "task." : "tasks."));
+  };
+  $("copy").onclick = async function () {
+    var out = [];
+    LISTS.forEach(function (name) {
+      var items = tasks.filter(function (t) { return t.list === name && !t.done; });
+      if (items.length) { out.push(name.toUpperCase()); items.forEach(function (t) { out.push("[ ] " + t.text); }); out.push(""); }
+    });
+    var text = out.join("\n").trim();
+    if (!text) { setStatus("No open tasks to copy."); return; }
+    var cb = $("copybox");
+    try { await navigator.clipboard.writeText(text); cb.hidden = true; setStatus("Open tasks copied."); }
+    catch (e) { cb.value = text; cb.hidden = false; cb.focus(); cb.select(); setStatus("Copy was blocked. The text is selected below, copy it from there."); }
+  };
+
+  tasks = readLocal(); render();
+})();
+</script>
+</body>
+</html>

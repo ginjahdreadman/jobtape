@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#E6E8E1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131614" media="(prefers-color-scheme: dark)">
+<title>Job Tape</title>
+<style>
+/* One narrow column built like a handheld recorder: talk deck on top, dated items next, then a tab per category holding projects, tasks and notes. */
+:root {
+  color-scheme: light dark;
+  --bg: #E6E8E1; --panel: #F4F5F0; --ink: #1B201C; --ink-2: #566058; --line: #C6CBC1;
+  --rec: #C4301C; --rec-ink: #FFFFFF; --chip: #D8DDD2; --ok: #2F6B45; --warn: #9A4A00;
+  --font-body: "Barlow Semi Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, "Roboto Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #131614; --panel: #1C201D; --ink: #E9ECE5; --ink-2: #9BA49C; --line: #333A35; --rec: #FF5B43; --rec-ink: #1A0804; --chip: #2A302C; --ok: #6FC08C; --warn: #F0A25A; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.35;
+  padding-block: max(20px, env(safe-area-inset-top, 0px)) max(56px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: 0.01em; }
+.counter { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.counter b { color: var(--ink); font-weight: 600; }
+.mono { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); }
+
+.deck { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.deck-top { display: flex; align-items: center; gap: 8px; }
+.led { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
+.deck[data-live="true"] .led { background: var(--rec); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rec) 25%, transparent); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .deck[data-live="true"] .led { animation: none; } }
+.talk { min-height: 64px; width: 100%; border-radius: 10px; border: 0; background: var(--rec); color: var(--rec-ink); font: inherit; font-size: 22px; font-weight: 700; letter-spacing: 0.02em; cursor: pointer; }
+.talk[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.talk:disabled { opacity: 0.45; cursor: default; }
+textarea, input[type="text"], input[type="password"], select {
+  width: 100%; font: inherit; font-size: 17px; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-height: 44px;
+}
+textarea { min-height: 110px; resize: vertical; font-size: 18px; }
+textarea::placeholder, input::placeholder { color: var(--ink-2); }
+.hint { margin: 0; font-size: 15px; color: var(--ink-2); max-width: 62ch; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.row > select { flex: 1 1 160px; width: auto; }
+button { font: inherit; cursor: pointer; }
+.btn { min-height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid var(--ink); background: transparent; color: var(--ink); font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+.btn.small { min-height: 36px; padding: 0 12px; font-size: 15px; }
+.btn.solid { background: var(--ink); color: var(--bg); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+:focus-visible { outline: 2px solid var(--rec); outline-offset: 2px; }
+.status { min-height: 24px; font-size: 15px; color: var(--ink-2); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.status .linkish { background: none; border: 0; padding: 4px 0; color: var(--ink); text-decoration: underline; font-weight: 600; }
+
+.sec { display: flex; flex-direction: column; gap: 6px; }
+.sec > h2 { margin: 0; display: flex; justify-content: space-between; gap: 8px; font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
+ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
+.up { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; border-top: 1px solid var(--line); padding: 6px 0; }
+.up:last-child { border-bottom: 1px solid var(--line); }
+.up .when { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; color: var(--ink-2); }
+.up.over .when { color: var(--rec); }
+.up .what { overflow-wrap: anywhere; }
+.up .tag { color: var(--ink-2); font-size: 14px; }
+
+.tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex: none; min-height: 40px; padding: 0 16px; border-radius: 20px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-weight: 600; }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+li.task { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 44px; align-items: center; border-top: 1px solid var(--line); }
+li.task:last-child { border-bottom: 1px solid var(--line); }
+li.task.nochip { grid-template-columns: 44px minmax(0, 1fr) 44px; }
+.tick { width: 44px; height: 48px; background: none; border: 0; display: grid; place-items: center; color: var(--ink); }
+.tick span { width: 22px; height: 22px; border: 2px solid var(--ink); border-radius: 5px; display: grid; place-items: center; font-size: 15px; line-height: 1; }
+li.done .tick span { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+li.done .tick span::after { content: "\2713"; }
+.txt { padding: 10px 6px; min-width: 0; overflow-wrap: anywhere; }
+li.done .txt { color: var(--ink-2); text-decoration: line-through; }
+.chip { min-height: 32px; padding: 0 10px; border-radius: 6px; border: 0; background: var(--chip); color: var(--ink-2); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; }
+.del { width: 44px; height: 48px; background: none; border: 0; color: var(--ink-2); font-size: 22px; line-height: 1; }
+li.note { display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: start; border-top: 1px solid var(--line); }
+li.note:last-child { border-bottom: 1px solid var(--line); }
+li.note .txt { padding: 8px 6px; }
+li.note .stamp { display: block; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-2); text-transform: uppercase; }
+
+.proj { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.proj-top { display: flex; align-items: stretch; }
+.proj-head { flex: 1; min-width: 0; text-align: left; background: none; border: 0; color: var(--ink); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.proj-name { font-size: 19px; font-weight: 700; overflow-wrap: anywhere; }
+.proj-meta { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; color: var(--ink-2); }
+.bar { height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--ok); }
+.proj-top > .btn { margin: 10px 10px 10px 0; align-self: center; }
+.proj-body { border-top: 1px solid var(--line); padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+.proj.is-done { opacity: 0.5; }
+.proj.is-done .proj-name { text-decoration: line-through; }
+.inline { display: flex; gap: 8px; flex-wrap: wrap; }
+.inline input { flex: 1 1 160px; width: auto; }
+
+.empty { border: 1px dashed var(--line); border-radius: 10px; padding: 14px; color: var(--ink-2); }
+details.box { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+details.box > summary { list-style: none; min-height: 44px; padding: 10px 14px; font-weight: 600; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+details.box > summary::-webkit-details-marker { display: none; }
+details.box > .in { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 14px; }
+.catrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding: 6px 0; }
+.catrow:first-child { border-top: 0; }
+#copybox { min-height: 120px; font-family: var(--font-mono); font-size: 14px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Job Tape</h1>
+    <div class="counter" id="counter" aria-live="polite"></div>
+  </header>
+
+  <section class="deck" id="deck" data-live="false" aria-label="Dictation">
+    <div class="deck-top"><span class="led" aria-hidden="true"></span><span class="mono" id="deckState">Ready</span></div>
+    <button class="talk" id="talk" type="button" aria-pressed="false">Talk</button>
+    <textarea id="dictation" aria-label="What you said" placeholder="Say it or type it. For example: on Hills job, add 10 metres of 6mm 2C&E and 3 boxes. I roughed in the kitchen today. Remind me Sarah's birthday is on the 14th of December."></textarea>
+    <div class="row">
+      <select id="fileUnder" aria-label="File under"></select>
+      <button class="btn solid" id="add" type="button">Add</button>
+    </div>
+    <p class="hint">Tap Talk, say what you need, tap Stop and it files everything. Say &ldquo;next task&rdquo; between separate things if it runs them together.</p>
+  </section>
+
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+
+  <section class="sec" id="upcoming" aria-label="Upcoming"></section>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Categories"></nav>
+  <section class="sec" id="view" aria-label="Category"></section>
+
+  <details class="box" id="settings">
+    <summary><span>Settings and backup</span><span class="mono">Open</span></summary>
+    <div class="in">
+      <div class="sec">
+        <h2><span>Claude tidy-up</span><span id="aiState"></span></h2>
+        <p class="hint">Optional. With an Anthropic API key, Claude cleans up rambling, writes your notes properly and works out which job or category each thing belongs to. Without it, the page uses basic rules. The key stays in this browser only and is never saved in backups. Get one at console.anthropic.com.</p>
+        <input type="password" id="apikey" placeholder="sk-ant-..." autocomplete="off" aria-label="Anthropic API key">
+        <div class="row"><button class="btn small" id="keySave" type="button">Save key</button><button class="btn small" id="keyClear" type="button">Remove key</button></div>
+      </div>
+      <div class="sec">
+        <h2><span>Categories</span></h2>
+        <div id="catList"></div>
+        <div class="inline"><input type="text" id="newCat" placeholder="New category, e.g. Garage" aria-label="New category name"><button class="btn small" id="addCat" type="button">Add category</button></div>
+      </div>
+      <div class="sec">
+        <h2><span>Backup</span></h2>
+        <p class="hint">Your list lives in this browser only. If you clear site data or change phones it is gone, so download a backup now and then.</p>
+        <div class="row"><button class="btn small" id="dl" type="button">Download backup</button><label class="btn small" for="restore">Restore from backup</label><input type="file" id="restore" accept=".json,application/json" hidden></div>
+      </div>
+    </div>
+  </details>
+  <textarea id="copybox" readonly hidden aria-label="Text to copy"></textarea>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  /*LOGIC-START*/
+  const pad2 = n => (n < 10 ? "0" : "") + n;
+  const ymd = d => d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  const parseYmd = s => { const p = s.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); };
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const capFirst = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  const MON_RE = "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
+  const WD_RE = "(mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|saturday|sunday)";
+  const MON3 = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const WD3 = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  const NUMW = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+
+  // Finds a date and/or time in a sentence. Returns { date: "YYYY-MM-DD", time: "HH:MM"|null, text } with the date words removed, or null.
+  function extractWhen(text, now) {
+    const today = startOfDay(now);
+    const dow = today.getDay();
+    let t = " " + text + " ", date = null, time = null, viaWeekday = false;
+    const cut = m => { t = t.slice(0, m.index) + " " + t.slice(m.index + m[0].length); };
+    let m = /\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i.exec(t);
+    if (m && +m[1] >= 1 && +m[1] <= 12) { let h = +m[1] % 12; if (/pm/i.test(m[3])) h += 12; time = pad2(h) + ":" + (m[2] || "00"); cut(m); }
+    else if ((m = /\bat\s+(\d{1,2}):(\d{2})\b/i.exec(t)) && +m[1] <= 23) { time = pad2(+m[1]) + ":" + m[2]; cut(m); }
+    const yearOf = (mo, day) => { let d = new Date(today.getFullYear(), mo, day); if (d < today) d = new Date(today.getFullYear() + 1, mo, day); return d; };
+    const md = (day, mon) => {
+      const mo = MON3.indexOf(mon.slice(0, 3).toLowerCase());
+      if (mo < 0 || day < 1 || day > 31) return null;
+      const d = yearOf(mo, day); return d.getMonth() === mo ? d : null;
+    };
+    const tryRe = (re, fn) => { if (date) return; const mm = re.exec(t); if (!mm) return; const d = fn(mm); if (d) { date = d; cut(mm); } };
+    tryRe(/\bday after tomorrow\b/i, () => addDays(today, 2));
+    tryRe(/\b(?:tomorrow|tmrw)\b/i, () => addDays(today, 1));
+    tryRe(/\b(?:today|tonight)\b/i, () => today);
+    tryRe(/\bin\s+(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+(day|days|week|weeks|month|months)\b/i, mm => {
+      const n = /^\d+$/.test(mm[1]) ? +mm[1] : NUMW[mm[1].toLowerCase()];
+      const u = mm[2].toLowerCase();
+      if (u.indexOf("day") === 0) return addDays(today, n);
+      if (u.indexOf("week") === 0) return addDays(today, 7 * n);
+      return new Date(today.getFullYear(), today.getMonth() + n, today.getDate());
+    });
+    tryRe(/\bnext\s+week\b/i, () => addDays(today, ((8 - dow) % 7) || 7));
+    tryRe(/\b(?:this\s+)?weekend\b/i, () => addDays(today, (6 - dow + 7) % 7));
+    tryRe(/\bnext\s+month\b/i, () => new Date(today.getFullYear(), today.getMonth() + 1, 1));
+    tryRe(new RegExp("\\b(?:on\\s+)?(?:the\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?" + MON_RE + "\\b", "i"), mm => md(+mm[1], mm[2]));
+    tryRe(new RegExp("\\b(?:on\\s+)?" + MON_RE + "\\s+(?:the\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\b", "i"), mm => md(+mm[2], mm[1]));
+    tryRe(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/, mm => {
+      const day = +mm[1], mo = +mm[2] - 1;
+      if (mo < 0 || mo > 11 || day < 1 || day > 31) return null;
+      if (mm[3]) { let y = +mm[3]; if (y < 100) y += 2000; const d = new Date(y, mo, day); return d.getMonth() === mo ? d : null; }
+      const d = yearOf(mo, day); return d.getMonth() === mo ? d : null;
+    });
+    tryRe(/\b(?:on\s+)?the\s+(\d{1,2})(?:st|nd|rd|th)\b/i, mm => {
+      const day = +mm[1]; if (day < 1 || day > 31) return null;
+      let d = new Date(today.getFullYear(), today.getMonth(), day);
+      if (d < today) d = new Date(today.getFullYear(), today.getMonth() + 1, day);
+      return d;
+    });
+    if (!date) {
+      tryRe(new RegExp("\\b(?:(on|this|next|coming)\\s+)?" + WD_RE + "\\b", "i"), mm => {
+        const pre = (mm[1] || "").toLowerCase();
+        const idx = WD3.indexOf(mm[2].slice(0, 3).toLowerCase());
+        const tw = (dow + 6) % 7, ti = (idx + 6) % 7;
+        let d = (ti - tw + 7) % 7;
+        if (d === 0 && pre !== "this") d = 7;
+        if (pre === "next" && d > 0 && tw + d <= 6) d += 7;
+        viaWeekday = true;
+        return addDays(today, d);
+      });
+    }
+    if (date && !viaWeekday) { const w = new RegExp("\\b(?:on\\s+)?" + WD_RE + "\\b", "i").exec(t); if (w) cut(w); }
+    if (!date && time) date = today;
+    if (!date) return null;
+    t = t.replace(/\s+/g, " ").trim();
+    for (let i = 0; i < 3; i++) t = t.replace(/\s+(?:on|by|for|at|due|this|next|is|are|will be)$/i, "");
+    t = t.replace(/^(?:on|by|for|at)\s+/i, "").replace(/[,\s]+$/, "");
+    return { date: ymd(date), time: time, text: t };
+  }
+
+  function tidy(s) {
+    s = s.replace(/[’]/g, "'")
+      .replace(/,?\s*\b(?:um+|uh+|er+m?|ah+|hmm+)\b\s*,?/gi, " ")
+      .replace(/,?\s*\b(?:you know|i mean|sort of|kind of|basically|literally)\b\s*,?/gi, " ")
+      .replace(/\bmom\b/gi, m => m.charAt(0) === "M" ? "Mum" : "mum")
+      .replace(/\b(\w+)(\s+\1\b)+/gi, "$1")
+      .replace(/\s+/g, " ").replace(/\s+([,.])/g, "$1").trim()
+      .replace(/^(?:(?:so|yeah|okay|ok|right|well|anyway|and|also|then)[,\s]+)+/i, "");
+    return capFirst(s);
+  }
+
+  function normName(s) { return s.toLowerCase().replace(/\b(?:the|my|job|project|site)\b/g, " ").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim(); }
+  function findProject(projects, frag) {
+    const f = normName(frag || ""); if (!f) return null;
+    let best = null;
+    projects.forEach(p => {
+      const n = normName(p.name); if (!n) return;
+      if (n === f || (f.length >= 3 && n.indexOf(f) >= 0) || (n.length >= 3 && f.indexOf(n) >= 0)) {
+        if (!best || (p.status !== "done" && best.status === "done")) best = p;
+      }
+    });
+    return best;
+  }
+
+  const KW = [
+    ["kids", /\b(kid|kids|school|daycare|children|son|daughter|homework|lunchbox)\b/i],
+    ["gaming", /\b(game|games|gaming|steam|xbox|playstation|ps5|nintendo|vr|quest|pc|computer)\b/i],
+    ["social", /\b(birthday|party|catch up|drinks|mates|friends|dinner with|bbq|wedding)\b/i],
+    ["work", /\b(quote|job|site|cable|circuit|switchboard|install|invoice|breaker|conduit|client|customer|metres|2c&e|2ce)\b/i],
+    ["home", /\b(mow|lawn|garden|fence|house|paddock|trailer|plumber|rubbish|laundry|groceries|supermarket)\b/i]
+  ];
+  function keywordCat(s, cats) {
+    for (let i = 0; i < KW.length; i++) {
+      if (KW[i][1].test(s)) { const c = cats.find(c => c.name.toLowerCase() === KW[i][0]); if (c) return c.id; }
+    }
+    return null;
+  }
+
+  const NOTE_RE = /^(?:(?:i|we)(?:'ve| have)?\s+)?(?:just\s+|also\s+|then\s+)?(?:did|done|finished|completed|installed|fitted|ran|pulled|terminated|tested|wired|mounted|replaced|fixed|roughed in|set up|put in|started|spent|worked|cleaned|connected|labelled|inspected|removed|built|upgraded|updated)\b/i;
+  const DONE_A = /^(?:the\s+)?(.+?)\s+(?:is\s+|has been\s+|was\s+)?(?:now\s+)?(?:completed|complete|finished|done|wrapped up|all done)$/i;
+  const DONE_B = /^(?:(?:i|we)(?:'ve| have)?\s+)?(?:finished|completed|wrapped up)\s+(?:the\s+)?(.+)$/i;
+  const REOPEN = /^(?:reopen|re-open|bring back|restart|resume)\s+(?:the\s+)?(.+)$/i;
+
+  // Basic sorting with no AI. ctx: { cats, projects, defaultCat, fixedCat, now }. Categories come back as ids.
+  function ruleParse(text, ctx) {
+    const out = { items: [], notes: [], events: [], complete: [], reopen: [], projects: [] };
+    text = text.replace(/[’]/g, "'");
+    const names = ctx.cats.map(c => esc(c.name)).join("|");
+    const catRe = new RegExp("^(?:(?:in|under|for|add to|put in)\\s+)?(?:the\\s+)?(" + names + ")(?:\\s*[:,]\\s*|\\s+(?:list|category)\\s+)(.*)$", "i");
+    const projNames = ctx.projects.map(p => p.name).sort((a, b) => b.length - a.length);
+    const segs = text.replace(/\b(?:next task|new task)\b/gi, "\n")
+      .split(/\n+|[.!?;]+(?:\s+|$)|\s+(?=(?:i did|i've done|i have done|i finished|i've finished|i have finished|we did|we finished|i also|i just|today i|remind me|don't forget|and then)\b)/i);
+    let explicitCat = null, proj = null, projCat = null;
+    const catByName = n => { const c = ctx.cats.find(c => c.name.toLowerCase() === n.toLowerCase()); return c ? c.id : null; };
+    const catFor = s => explicitCat || projCat || ctx.fixedCat || keywordCat(s, ctx.cats) || ctx.defaultCat;
+    const known = n => [].concat(ctx.projects, out.projects).find(p => normName(p.name) === normName(n));
+
+    for (const raw of segs) {
+      let s = (raw || "").trim().replace(/^[,\s]+|[,\s]+$/g, "");
+      if (s.length < 2) continue;
+      s = s.replace(/^(?:(?:and|also|then|so|yeah|okay|ok|right|well|um|uh)[,\s]+)+/i, "");
+
+      let m = catRe.exec(s);
+      if (m) { explicitCat = catByName(m[1]); proj = null; projCat = null; s = m[2].trim(); if (!s) continue; }
+
+      let matchedProj = false;
+      for (const pn of projNames) {
+        const r = new RegExp("^(?:on|for|at|in|working on)\\s+(?:the\\s+)?" + esc(pn) + "\\b[\\s,:-]*(.*)$", "i");
+        if ((m = r.exec(s))) { proj = pn; const p = known(pn); projCat = p ? p.cat : projCat; s = m[1].trim(); matchedProj = true; break; }
+      }
+      if (!matchedProj && (m = /^(?:on|for|at|in|working on)\s+(?:the\s+)?(.+?\s(?:job|project|site))\b[\s,:-]*(.*)$/i.exec(s))) {
+        const nm = m[1].trim();
+        if (!/^(?:the|this|that)\s/i.test(nm)) {
+          proj = capFirst(nm);
+          const p = known(proj);
+          projCat = p ? p.cat : (explicitCat || ctx.fixedCat || keywordCat(proj, ctx.cats) || ctx.defaultCat);
+          if (!p) out.projects.push({ name: proj, cat: projCat });
+        }
+        s = m[2].trim();
+      }
+      if (!s) continue;
+
+      if ((m = REOPEN.exec(s))) { const p = findProject(ctx.projects, m[1]); if (p) { out.reopen.push(p.name); continue; } }
+      if ((m = DONE_A.exec(s)) || (m = DONE_B.exec(s))) {
+        const frag = m[1].trim();
+        const p = findProject(ctx.projects.concat(out.projects), frag);
+        if (p) { out.complete.push(p.name); continue; }
+        if (proj && /^(?:that|it|this|all|job|project)$/i.test(frag)) { out.complete.push(proj); continue; }
+      }
+      if (NOTE_RE.test(s) || /^today\b/i.test(s)) {
+        out.notes.push({ text: tidy(s.replace(/^today[,\s]+/i, "")), cat: catFor(s), project: proj });
+        continue;
+      }
+      const w = extractWhen(s, ctx.now);
+      if (w && w.text.length > 1) {
+        const et = tidy(w.text.replace(/^(?:(?:please\s+)?remind me|don't forget)\s*(?:that\s+|to\s+)?/i, ""));
+        const ecat = explicitCat || ctx.fixedCat || keywordCat(s, ctx.cats) || ctx.defaultCat;
+        out.events.push({ text: et, date: w.date, time: w.time, cat: ecat, recur: /birthday|anniversary/i.test(s) });
+        continue;
+      }
+      const it = tidy(s.replace(/^(?:(?:please\s+)?remind me|don't forget)\s*(?:that\s+|to\s+)?/i, "").replace(/^add\s+/i, "").replace(/^(?:i\s+)?(?:need|have|got) to\s+/i, "").replace(/^to\s+/i, ""));
+      if (it.length > 1) out.items.push({ text: it, cat: catFor(s), project: proj });
+    }
+    return out;
+  }
+  /*LOGIC-END*/
+
+  // ---------- state ----------
+  const KEY = "jobtape.v2", KEYAPI = "jobtape.apikey";
+  const $ = id => document.getElementById(id);
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const DEFAULT_CATS = ["Home", "Work", "Gaming", "Social", "Kids"];
+  function freshState() {
+    return { v: 2, cats: DEFAULT_CATS.map(n => ({ id: "c-" + n.toLowerCase(), name: n })), projects: [], items: [], notes: [], events: [], tab: "c-work" };
+  }
+  function sanitise(s) {
+    if (!s || !Array.isArray(s.cats) || !s.cats.length) return null;
+    ["projects", "items", "notes", "events"].forEach(k => { if (!Array.isArray(s[k])) s[k] = []; });
+    if (!s.cats.some(c => c.id === s.tab)) s.tab = s.cats[0].id;
+    return s;
+  }
+  function load() { try { const r = localStorage.getItem(KEY); if (r) { const s = sanitise(JSON.parse(r)); if (s) return s; } } catch (e) {} return freshState(); }
+  let state = load();
+  let undoSnap = null, showAllEvents = false;
+  const openProj = new Set();
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { setStatus("This browser would not save the list. Download a backup before closing the page."); } }
+  function commit() { save(); render(); }
+  function mutate(label, fn) { undoSnap = JSON.stringify(state); fn(); commit(); if (label) setStatus(label, true); }
+  const getKey = () => { try { return localStorage.getItem(KEYAPI) || ""; } catch (e) { return ""; } };
+
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function btn(cls, text, fn, label) { const b = el("button", cls, text); b.type = "button"; if (label) b.setAttribute("aria-label", label); b.onclick = fn; return b; }
+  function setStatus(msg, undoable) {
+    const s = $("status"); s.textContent = msg || "";
+    if (undoable && undoSnap) {
+      s.appendChild(btn("linkish", "Undo", () => { state = sanitise(JSON.parse(undoSnap)) || freshState(); undoSnap = null; commit(); setStatus("Undone."); }));
+    }
+  }
+  const catName = id => { const c = state.cats.find(c => c.id === id); return c ? c.name : "?"; };
+  const jobWord = cid => catName(cid).toLowerCase() === "work" ? "Jobs" : "Projects";
+
+  function rollEvents() {
+    const t = ymd(new Date());
+    state.events.forEach(e => {
+      if (e.recur && !e.done) { let n = 0; while (e.date < t && n++ < 200) { const d = parseYmd(e.date); e.date = ymd(new Date(d.getFullYear() + 1, d.getMonth(), d.getDate())); } }
+    });
+  }
+
+  // ---------- applying sorted results ----------
+  function applyOps(ops) {
+    const c = { items: 0, notes: 0, events: 0, done: 0, projects: 0 };
+    const projFor = (name, cid) => {
+      if (!name) return null;
+      let p = findProject(state.projects, name);
+      if (!p) { p = { id: uid(), cat: cid, name: capFirst(name), status: "active", created: Date.now() }; state.projects.push(p); c.projects++; }
+      return p;
+    };
+    (ops.projects || []).forEach(p => projFor(p.name, p.cat));
+    const now = Date.now();
+    (ops.items || []).forEach((it, i) => { const p = projFor(it.project, it.cat); state.items.push({ id: uid(), cat: p ? p.cat : it.cat, project: p ? p.id : null, text: it.text, done: false, ts: now + i }); c.items++; });
+    (ops.notes || []).forEach((n, i) => { const p = projFor(n.project, n.cat); state.notes.push({ id: uid(), cat: p ? p.cat : n.cat, project: p ? p.id : null, text: n.text, ts: now + i }); c.notes++; });
+    (ops.events || []).forEach(e => { state.events.push({ id: uid(), text: e.text, date: e.date, time: e.time || null, cat: e.cat, recur: !!e.recur, done: false }); c.events++; });
+    (ops.complete || []).forEach(n => { const p = findProject(state.projects, n); if (p && p.status !== "done") { p.status = "done"; p.doneAt = now; c.done++; } });
+    (ops.reopen || []).forEach(n => { const p = findProject(state.projects, n); if (p) { p.status = "active"; p.doneAt = null; } });
+    return c;
+  }
+  function summary(c) {
+    const bits = [];
+    const add = (n, one, many) => { if (n) bits.push(n + " " + (n === 1 ? one : many)); };
+    add(c.items, "task", "tasks"); add(c.notes, "note", "notes"); add(c.events, "date", "dates"); add(c.done, "project completed", "projects completed"); add(c.projects, "new project", "new projects");
+    return bits.length ? "Added " + bits.join(", ") + "." : "Nothing new to file from that.";
+  }
+
+  // ---------- Claude tidy-up (optional) ----------
+  async function aiParse(text, ctx) {
+    const today = ctx.now;
+    const active = state.projects.filter(p => p.status !== "done").map(p => p.name + " (" + catName(p.cat) + ")").join("; ") || "none";
+    const done = state.projects.filter(p => p.status === "done").map(p => p.name).join("; ") || "none";
+    const prompt = "You file a tradesperson's spoken notes into a task app. Today is " + today.toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) + " (" + ymd(today) + ").\n" +
+      "Categories: " + state.cats.map(c => c.name).join(", ") + ".\nActive projects/jobs: " + active + ".\nCompleted projects: " + done + ".\n" +
+      "If the speaker gives no category and the content does not make it obvious, use " + catName(ctx.defaultCat) + ".\n\n" +
+      "Reply with ONLY one JSON object, no other text, in this shape:\n" +
+      '{"items":[{"text":"","category":"","project":null}],"notes":[{"text":"","category":"","project":null}],"events":[{"text":"","date":"YYYY-MM-DD","time":"HH:MM or null","category":"","recur":false}],"complete":[],"reopen":[],"projects":[{"name":"","category":""}]}\n' +
+      "Rules: items are things to do or buy. notes are things already done or observations, written as clear short sentences for an end-of-day job log (keep cable sizes, quantities and measurements exactly as said). events are anything tied to a date or time, including reminders and birthdays (recur true for birthdays and anniversaries); work out the date from today. " +
+      '"project" is the job or project the speaker is working on (they may say "on Hills job"); reuse an existing project name when it matches, otherwise use the name they said and list it under projects. "complete" lists projects the speaker says are finished; "reopen" lists projects they want back. ' +
+      "Remove filler words and repeats, fix speech-to-text slips, use New Zealand spelling (Mum, metres). Do not invent anything the speaker did not say. Use empty arrays when there is nothing.\n\nWhat was said:\n" + text.slice(0, 20000);
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": getKey(), "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify({ model: "claude-haiku-5-5", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+    });
+    if (!r.ok) { const e = new Error("http " + r.status); e.status = r.status; throw e; }
+    const j = await r.json();
+    const raw = (j.content || []).map(c => c.text || "").join("");
+    const a = raw.indexOf("{"), b = raw.lastIndexOf("}");
+    if (a < 0 || b < a) throw new Error("no json");
+    return JSON.parse(raw.slice(a, b + 1));
+  }
+  function normaliseAi(raw, ctx) {
+    const toCat = (n, hasProj) => {
+      if (ctx.fixedCat && !hasProj) return ctx.fixedCat;
+      const c = state.cats.find(c => c.name.toLowerCase() === String(n || "").toLowerCase());
+      return c ? c.id : (ctx.fixedCat || ctx.defaultCat);
+    };
+    const str = v => (typeof v === "string" ? v.trim() : "");
+    const arr = v => (Array.isArray(v) ? v : []);
+    const ops = { items: [], notes: [], events: [], complete: [], reopen: [], projects: [] };
+    arr(raw.items).forEach(x => { if (str(x.text)) ops.items.push({ text: capFirst(str(x.text)), cat: toCat(x.category, !!str(x.project)), project: str(x.project) || null }); });
+    arr(raw.notes).forEach(x => { if (str(x.text)) ops.notes.push({ text: capFirst(str(x.text)), cat: toCat(x.category, !!str(x.project)), project: str(x.project) || null }); });
+    arr(raw.events).forEach(x => { if (str(x.text) && /^\d{4}-\d{2}-\d{2}$/.test(str(x.date))) ops.events.push({ text: capFirst(str(x.text)), date: str(x.date), time: /^\d{2}:\d{2}$/.test(str(x.time)) ? str(x.time) : null, cat: toCat(x.category, false), recur: !!x.recur }); });
+    arr(raw.complete).forEach(n => { if (str(n)) ops.complete.push(str(n)); });
+    arr(raw.reopen).forEach(n => { if (str(n)) ops.reopen.push(str(n)); });
+    arr(raw.projects).forEach(p => { if (str(p.name)) ops.projects.push({ name: str(p.name), cat: toCat(p.category, false) }); });
+    return ops;
+  }
+
+  // ---------- adding what was said ----------
+  const box = $("dictation"), addBtn = $("add");
+  async function onAdd() {
+    const text = box.value.trim();
+    if (!text) { setStatus("Nothing to add yet. Talk or type first."); return; }
+    addBtn.disabled = true;
+    const sel = $("fileUnder").value;
+    const ctx = { cats: state.cats, projects: state.projects, defaultCat: state.tab, fixedCat: sel === "auto" ? null : sel, now: new Date() };
+    let ops = null, note = "";
+    if (getKey()) {
+      setStatus("Claude is tidying and filing your note...");
+      try { ops = normaliseAi(await aiParse(text, ctx), ctx); }
+      catch (e) { note = e && e.status === 401 ? " Your API key was rejected, so basic sorting was used." : " Claude could not be reached, so basic sorting was used."; }
+    }
+    if (!ops) ops = ruleParse(text, ctx);
+    let c;
+    mutate(null, () => { c = applyOps(ops); });
+    box.value = ""; live();
+    setStatus(summary(c) + note, true);
+    addBtn.disabled = false;
+  }
+
+  // ---------- rendering ----------
+  const todayStr = () => ymd(new Date());
+  function dayLabel(dateStr) {
+    const diff = Math.round((parseYmd(dateStr) - startOfDay(new Date())) / 86400000);
+    const d = parseYmd(dateStr).toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" });
+    if (diff < 0) return "Overdue " + d;
+    if (diff === 0) return "Today";
+    if (diff === 1) return "Tomorrow";
+    if (diff < 7) return d;
+    return d;
+  }
+  function calUrl(ev) {
+    const d = ev.date.replace(/-/g, ""); let dates;
+    if (ev.time) {
+      const h = +ev.time.slice(0, 2), mi = ev.time.slice(3);
+      const start = d + "T" + pad2(h) + mi + "00";
+      const end = h >= 23 ? d + "T235900" : d + "T" + pad2(h + 1) + mi + "00";
+      dates = start + "/" + end;
+    } else { dates = d + "/" + ymd(addDays(parseYmd(ev.date), 1)).replace(/-/g, ""); }
+    return "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" + encodeURIComponent(ev.text) + "&dates=" + dates + "&details=" + encodeURIComponent("From Job Tape");
+  }
+
+  function renderUpcoming() {
+    const host = $("upcoming"); host.textContent = "";
+    const evs = state.events.filter(e => !e.done).sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
+    if (!evs.length) return;
+    const limit = ymd(addDays(new Date(), 30));
+    const soon = evs.filter(e => e.date <= limit);
+    const shown = showAllEvents ? evs : soon;
+    const h = el("h2"); h.appendChild(el("span", null, "Upcoming"));
+    if (evs.length > soon.length || showAllEvents) h.appendChild(btn("linkish", showAllEvents ? "Show next 30 days" : "Show all " + evs.length, () => { showAllEvents = !showAllEvents; renderUpcoming(); }));
+    host.appendChild(h);
+    if (!shown.length) { host.appendChild(el("div", "empty", "Nothing in the next 30 days. " + evs.length + " later.")); return; }
+    const t = todayStr();
+    shown.forEach(ev => {
+      const row = el("div", "up" + (ev.date < t ? " over" : ""));
+      const left = el("div");
+      left.appendChild(el("div", "when", dayLabel(ev.date) + (ev.time ? " " + ev.time : "")));
+      left.appendChild(el("div", "what", ev.text));
+      left.appendChild(el("div", "tag", catName(ev.cat)));
+      const a = el("a", "btn small", "Calendar"); a.href = calUrl(ev); a.target = "_blank"; a.rel = "noopener";
+      a.setAttribute("aria-label", "Add " + ev.text + " to calendar");
+      const tick = btn("btn small", "Done", () => {
+        if (ev.recur) { const d = parseYmd(ev.date); ev.date = ymd(new Date(d.getFullYear() + 1, d.getMonth(), d.getDate())); } else ev.done = true;
+        commit();
+      }, "Done: " + ev.text);
+      row.appendChild(left); row.appendChild(a); row.appendChild(tick);
+      host.appendChild(row);
+    });
+  }
+
+  function renderTabs() {
+    const nav = $("tabs"); nav.textContent = "";
+    state.cats.forEach(c => {
+      const b = btn("tab", c.name, () => { state.tab = c.id; commit(); });
+      b.setAttribute("role", "tab"); b.setAttribute("aria-selected", c.id === state.tab ? "true" : "false");
+      nav.appendChild(b);
+    });
+    nav.appendChild(btn("tab", "+", () => { const s = $("settings"); s.open = true; $("newCat").focus(); s.scrollIntoView({ block: "center" }); }, "Add a category"));
+  }
+  function renderSelect() {
+    const s = $("fileUnder"), keep = s.value || "auto"; s.textContent = "";
+    const o = el("option", null, "File under: Auto"); o.value = "auto"; s.appendChild(o);
+    state.cats.forEach(c => { const x = el("option", null, "File under: " + c.name); x.value = c.id; s.appendChild(x); });
+    s.value = state.cats.some(c => c.id === keep) || keep === "auto" ? keep : "auto";
+  }
+
+  function itemRow(i, withChip) {
+    const li = el("li", "task" + (i.done ? " done" : "") + (withChip ? "" : " nochip"));
+    const tick = el("button", "tick"); tick.type = "button"; tick.innerHTML = "<span></span>";
+    tick.setAttribute("aria-label", (i.done ? "Mark not done: " : "Mark done: ") + i.text);
+    tick.onclick = () => { i.done = !i.done; commit(); };
+    li.appendChild(tick); li.appendChild(el("div", "txt", i.text));
+    if (withChip) {
+      const chip = btn("chip", catName(i.cat), () => { const k = state.cats.findIndex(c => c.id === i.cat); i.cat = state.cats[(k + 1) % state.cats.length].id; commit(); }, "Move " + i.text + " to the next category");
+      li.appendChild(chip);
+    }
+    li.appendChild(btn("del", "×", () => mutate("Removed.", () => { state.items = state.items.filter(x => x !== i); }), "Remove " + i.text));
+    return li;
+  }
+  function noteRow(n) {
+    const li = el("li", "note");
+    const d = new Date(n.ts);
+    const box2 = el("div", "txt");
+    box2.appendChild(el("span", "stamp", d.toLocaleDateString("en-NZ", { weekday: "short", day: "numeric", month: "short" }) + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes())));
+    box2.appendChild(document.createTextNode(n.text));
+    li.appendChild(box2);
+    li.appendChild(btn("del", "×", () => mutate("Note removed.", () => { state.notes = state.notes.filter(x => x !== n); }), "Remove note"));
+    return li;
+  }
+  function sortItems(a, b) { return (a.done - b.done) || (b.ts - a.ts); }
+
+  function projectCard(p) {
+    const items = state.items.filter(i => i.project === p.id).sort(sortItems);
+    const notes = state.notes.filter(n => n.project === p.id).sort((a, b) => b.ts - a.ts);
+    const doneN = items.filter(i => i.done).length;
+    const open = openProj.has(p.id), isDone = p.status === "done";
+    const card = el("div", "proj" + (isDone ? " is-done" : ""));
+    const top = el("div", "proj-top");
+    const head = el("button", "proj-head"); head.type = "button"; head.setAttribute("aria-expanded", open ? "true" : "false");
+    head.appendChild(el("span", "proj-name", p.name));
+    head.appendChild(el("span", "proj-meta", (items.length ? doneN + " of " + items.length + " done · " : "") + notes.length + (notes.length === 1 ? " note" : " notes") + (isDone ? " · completed" : "")));
+    if (items.length) { const bar = el("div", "bar"); const f = el("i"); f.style.width = Math.round(doneN / items.length * 100) + "%"; bar.appendChild(f); head.appendChild(bar); }
+    head.onclick = () => { if (open) openProj.delete(p.id); else openProj.add(p.id); renderView(); };
+    top.appendChild(head);
+    if (isDone) top.appendChild(btn("btn small", "Reopen", () => { p.status = "active"; p.doneAt = null; commit(); }, "Reopen " + p.name));
+    card.appendChild(top);
+    if (open) {
+      const body = el("div", "proj-body");
+      if (items.length) { const ul = el("ul"); items.forEach(i => ul.appendChild(itemRow(i, false))); body.appendChild(ul); }
+      if (notes.length) { const s = el("div", "sec"); s.appendChild(el("h2", null, "Notes")); const ul = el("ul"); notes.forEach(n => ul.appendChild(noteRow(n))); s.appendChild(ul); body.appendChild(s); }
+      if (!items.length && !notes.length) body.appendChild(el("div", "hint", "Nothing here yet. Say “on " + p.name + ", add...” or type below."));
+      const inl = el("div", "inline"); const inp = el("input"); inp.type = "text"; inp.placeholder = "Add to " + p.name; inp.setAttribute("aria-label", "Add to " + p.name);
+      const addOne = kind => () => {
+        const v = tidy(inp.value); if (!v) return;
+        mutate(null, () => { if (kind === "item") state.items.push({ id: uid(), cat: p.cat, project: p.id, text: v, done: false, ts: Date.now() }); else state.notes.push({ id: uid(), cat: p.cat, project: p.id, text: v, ts: Date.now() }); });
+      };
+      inp.addEventListener("keydown", e => { if (e.key === "Enter") addOne("item")(); });
+      inl.appendChild(inp); inl.appendChild(btn("btn small", "Task", addOne("item"))); inl.appendChild(btn("btn small", "Note", addOne("note")));
+      body.appendChild(inl);
+      const acts = el("div", "row");
+      if (!isDone) acts.appendChild(btn("btn small solid", "Mark complete", () => { p.status = "done"; p.doneAt = Date.now(); commit(); setStatus(p.name + " completed. It stays at the bottom of the list, greyed out."); }));
+      let armed = false;
+      const del = btn("btn small", "Delete", () => {
+        if (!armed) { armed = true; del.textContent = "Tap again to delete"; return; }
+        mutate(p.name + " deleted.", () => { state.projects = state.projects.filter(x => x !== p); state.items = state.items.filter(i => i.project !== p.id); state.notes = state.notes.filter(n => n.project !== p.id); });
+      });
+      acts.appendChild(del);
+      body.appendChild(acts);
+      card.appendChild(body);
+    }
+    return card;
+  }
+
+  function copyTodayNotes(cid) {
+    const start = startOfDay(new Date()).getTime();
+    const notes = state.notes.filter(n => n.cat === cid && n.ts >= start).sort((a, b) => a.ts - b.ts);
+    if (!notes.length) { setStatus("No notes from today in " + catName(cid) + " yet."); return; }
+    const groups = new Map();
+    notes.forEach(n => { const p = state.projects.find(p => p.id === n.project); const k = p ? p.name : "General"; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(n.text); });
+    const lines = [catName(cid).toUpperCase() + " NOTES, " + new Date().toLocaleDateString("en-NZ", { weekday: "long", day: "numeric", month: "long" })];
+    groups.forEach((arr, k) => { lines.push("", k); arr.forEach(t => lines.push("- " + t)); });
+    copyText(lines.join("\n"), "Today's notes copied.");
+  }
+  async function copyText(text, okMsg) {
+    const cb = $("copybox");
+    try { await navigator.clipboard.writeText(text); cb.hidden = true; setStatus(okMsg); }
+    catch (e) { cb.value = text; cb.hidden = false; cb.focus(); cb.select(); setStatus("Copy was blocked. The text is selected below, copy it from there."); }
+  }
+
+  function renderView() {
+    const host = $("view"); host.textContent = ""; const cid = state.tab;
+    const projs = state.projects.filter(p => p.cat === cid);
+    const active = projs.filter(p => p.status !== "done").sort((a, b) => b.created - a.created);
+    const done = projs.filter(p => p.status === "done").sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
+    const loose = state.items.filter(i => i.cat === cid && !i.project).sort(sortItems);
+    const looseNotes = state.notes.filter(n => n.cat === cid && !n.project).sort((a, b) => b.ts - a.ts);
+
+    const np = el("div", "inline"); const inp = el("input"); inp.type = "text"; inp.placeholder = "New " + jobWord(cid).toLowerCase().replace(/s$/, "") + " name"; inp.setAttribute("aria-label", "New project name");
+    const mk = () => { const v = capFirst(inp.value.trim()); if (!v) return; mutate(null, () => { const p = { id: uid(), cat: cid, name: v, status: "active", created: Date.now() }; state.projects.push(p); openProj.add(p.id); }); };
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") mk(); });
+    np.appendChild(inp); np.appendChild(btn("btn small", "Add " + jobWord(cid).toLowerCase().replace(/s$/, ""), mk));
+    host.appendChild(np);
+
+    if (active.length) { const s = el("div", "sec"); const h = el("h2"); h.appendChild(el("span", null, jobWord(cid))); h.appendChild(el("span", null, active.length + " active")); s.appendChild(h); active.forEach(p => s.appendChild(projectCard(p))); host.appendChild(s); }
+    if (loose.length) { const s = el("div", "sec"); const h = el("h2"); h.appendChild(el("span", null, "Tasks")); h.appendChild(el("span", null, loose.filter(i => !i.done).length + " open")); s.appendChild(h); const ul = el("ul"); loose.forEach(i => ul.appendChild(itemRow(i, true))); s.appendChild(ul); host.appendChild(s); }
+    if (looseNotes.length) { const s = el("div", "sec"); s.appendChild(el("h2", null, "Notes")); const ul = el("ul"); looseNotes.forEach(n => ul.appendChild(noteRow(n))); s.appendChild(ul); host.appendChild(s); }
+    if (done.length) { const s = el("div", "sec"); const h = el("h2"); h.appendChild(el("span", null, "Completed")); h.appendChild(el("span", null, String(done.length))); s.appendChild(h); done.forEach(p => s.appendChild(projectCard(p))); host.appendChild(s); }
+    if (!active.length && !loose.length && !looseNotes.length && !done.length) {
+      host.appendChild(el("div", "empty", "Nothing in " + catName(cid) + " yet. Try saying: “on Hills job, add 10 metres of 6mm 2C&E and 3 boxes. I roughed in the kitchen today.”"));
+    }
+    const tools = el("div", "row");
+    tools.appendChild(btn("btn small", "Copy today's notes", () => copyTodayNotes(cid)));
+    if (loose.some(i => i.done)) tools.appendChild(btn("btn small", "Clear done tasks", () => mutate("Cleared finished tasks.", () => { state.items = state.items.filter(i => !(i.cat === cid && !i.project && i.done)); })));
+    host.appendChild(tools);
+  }
+
+  function renderSettings() {
+    $("aiState").textContent = getKey() ? "On" : "Off";
+    $("aiState").className = "mono";
+    const list = $("catList"); list.textContent = "";
+    state.cats.forEach(c => {
+      const used = state.projects.some(p => p.cat === c.id) || state.items.some(i => i.cat === c.id) || state.notes.some(n => n.cat === c.id) || state.events.some(e => e.cat === c.id);
+      const row = el("div", "catrow"); row.appendChild(el("span", null, c.name));
+      if (!used && state.cats.length > 1) row.appendChild(btn("btn small", "Remove", () => mutate("Category removed.", () => { state.cats = state.cats.filter(x => x !== c); if (state.tab === c.id) state.tab = state.cats[0].id; }), "Remove " + c.name));
+      else row.appendChild(el("span", "mono", used ? "In use" : ""));
+      list.appendChild(row);
+    });
+  }
+  function render() {
+    rollEvents();
+    const open = state.items.filter(i => !i.done).length, dated = state.events.filter(e => !e.done).length;
+    $("counter").innerHTML = "Open <b>" + pad2(open) + "</b> / Dated <b>" + pad2(dated) + "</b>";
+    renderUpcoming(); renderTabs(); renderSelect(); renderView(); renderSettings();
+  }
+
+  // ---------- settings actions ----------
+  $("keySave").onclick = () => { const v = $("apikey").value.trim(); if (!v) { setStatus("Paste your key first."); return; } try { localStorage.setItem(KEYAPI, v); } catch (e) {} $("apikey").value = ""; renderSettings(); setStatus("Key saved on this phone. Claude will tidy and file what you say."); };
+  $("keyClear").onclick = () => { try { localStorage.removeItem(KEYAPI); } catch (e) {} $("apikey").value = ""; renderSettings(); setStatus("Key removed. Basic sorting will be used."); };
+  const addCat = () => {
+    const v = capFirst($("newCat").value.trim()); if (!v) return;
+    if (state.cats.some(c => c.name.toLowerCase() === v.toLowerCase())) { setStatus("That category already exists."); return; }
+    mutate("Added category " + v + ".", () => { const c = { id: "c-" + uid(), name: v }; state.cats.push(c); state.tab = c.id; });
+    $("newCat").value = "";
+  };
+  $("addCat").onclick = addCat;
+  $("newCat").addEventListener("keydown", e => { if (e.key === "Enter") addCat(); });
+  $("dl").onclick = () => {
+    const blob = new Blob([JSON.stringify(state, null, 1)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "job-tape-backup-" + todayStr() + ".json";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    setStatus("Backup downloaded to your phone.");
+  };
+  $("restore").onchange = e => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try { const s = sanitise(JSON.parse(r.result)); if (!s) throw new Error("bad"); undoSnap = JSON.stringify(state); state = s; commit(); setStatus("Backup restored.", true); }
+      catch (err) { setStatus("That file is not a Job Tape backup."); }
+    };
+    r.readAsText(f); e.target.value = "";
+  };
+
+  // ---------- speech ----------
+  const deck = $("deck"), talk = $("talk");
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null, want = false, addOnEnd = false, base = "";
+  function live() { deck.dataset.live = want ? "true" : "false"; }
+  function setLive(on) { deck.dataset.live = on ? "true" : "false"; talk.setAttribute("aria-pressed", on ? "true" : "false"); talk.textContent = on ? "Stop and add" : "Talk"; $("deckState").textContent = on ? "Listening" : "Ready"; }
+  function startTalk() {
+    base = box.value ? box.value.replace(/\s+$/, "") + " " : "";
+    rec = new SR(); rec.lang = "en-NZ"; rec.continuous = true; rec.interimResults = true;
+    rec.onresult = e => {
+      // Android Chrome reports each growing guess as its own result. A result that starts with the previous one replaces it.
+      const segs = [];
+      for (let i = 0; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript.trim(); if (!t) continue;
+        const last = segs.length ? segs[segs.length - 1] : null;
+        if (last !== null && t.toLowerCase().indexOf(last.toLowerCase()) === 0) segs[segs.length - 1] = t; else segs.push(t);
+      }
+      box.value = base + segs.join(" ");
+    };
+    rec.onerror = e => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") { want = false; setStatus("Microphone is blocked. Allow it for this site in your browser settings, then try again."); }
+      else if (e.error === "audio-capture") { want = false; setStatus("No microphone found."); }
+      else if (e.error === "network") { want = false; setStatus("Speech recognition needs an internet connection."); }
+    };
+    rec.onend = () => {
+      if (want) { base = box.value.replace(/\s+$/, "") + " "; try { rec.start(); return; } catch (err) { want = false; } }
+      setLive(false);
+      if (addOnEnd) { addOnEnd = false; onAdd(); }
+    };
+    want = true; setLive(true); setStatus("");
+    try { rec.start(); } catch (err) { want = false; setLive(false); setStatus("Could not start the microphone. Try again."); }
+  }
+  function stopTalk() { want = false; addOnEnd = true; try { rec.stop(); } catch (err) { setLive(false); addOnEnd = false; onAdd(); } }
+  if (!SR) {
+    talk.disabled = true; talk.textContent = "Talk (not supported here)"; $("deckState").textContent = "Typing only";
+    setStatus("This browser has no speech recognition. Use Chrome on Android or Safari on iPhone, or the keyboard's mic key.");
+  } else { talk.onclick = () => { if (want) stopTalk(); else startTalk(); }; }
+  addBtn.onclick = () => { if (want) stopTalk(); else onAdd(); };
+  box.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") addBtn.click(); });
+
+  render();
+})();
+</script>
+</body>
+</html>
